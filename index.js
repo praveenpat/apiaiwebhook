@@ -18,53 +18,94 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-
+const geocodeService = require('./geocode/geocode.js');
+const phonenumberService = require('./geocode/getAreaCode.js');
 
 const restService = express();
 restService.use(bodyParser.json());
 
 restService.post('/hook', function (req, res) {
 
-    console.log('hook request');
+    console.log('hook request',req);
+    console.log('Parameters',req.body.result.parameters);
 
-    try {
-        var speech = 'empty speech';
+    var zip=false;
 
-        if (req.body) {
-            var requestBody = req.body;
+     if(req.body.result.parameters.zipcode){
 
-            if (requestBody.result) {
-                speech = '';
+         zip=true;
+     }
 
-                if (requestBody.result.fulfillment) {
-                    speech += requestBody.result.fulfillment.speech;
-                    speech += ' ';
-                }
 
-                if (requestBody.result.action) {
-                    speech += 'action: ' + requestBody.result.action;
-                }
+     if(zip) {
+
+         geocodeService.geoCodePromise(req.body.result.parameters.zipcode).then(results => {
+
+             //var phoneNumbers = getPhoneNumbers(results.state);
+             console.log(results);
+
+             return createResponse(results.State,req,res);
+
+         });
+
+
+     }
+
+     else {
+
+         return createResponse(req.body.result.parameters.state,req,res);
+
+     }
+
+});
+
+
+var createResponse=(state,req,res)=>{
+try {
+
+    var phoneNumbers = phonenumberService.getAvailablePhoneNumbers(state);
+    var speech = 'empty speech';
+
+    if (req.body) {
+        var requestBody = req.body;
+
+        if (requestBody.result) {
+            speech = '';
+
+            if (requestBody.result.fulfillment) {
+                speech += requestBody.result.fulfillment.speech;
+                speech += ' ';
+            }
+
+            if (requestBody.result.action) {
+                speech += 'action: ' + requestBody.result.action;
             }
         }
-
-        console.log('result: ', speech);
-
-        return res.json({
-            speech: speech,
-            displayText: speech,
-            source: 'apiai-webhook-sample'
-        });
-    } catch (err) {
-        console.error("Can't process request", err);
-
-        return res.status(400).json({
-            status: {
-                code: 400,
-                errorType: err.message
-            }
-        });
     }
-});
+
+    console.log('result: ', speech);
+
+    var responseString = 'Please select from the following numbers - ' + phoneNumbers;
+
+    return res.json({
+        speech: responseString,
+        displayText: responseString,
+        source: 'apiai-webhook-sample'
+    });
+} catch (err) {
+    console.error("Can't process request", err);
+
+    return res.status(400).json({
+        status: {
+            code: 400,
+            errorType: err.message
+        }
+    });
+}
+
+
+
+}
 
 restService.listen((process.env.PORT || 5000), function () {
     console.log("Server listening");
